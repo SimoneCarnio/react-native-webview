@@ -9,19 +9,14 @@ import com.facebook.react.uimanager.UIManagerModule;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
@@ -48,7 +43,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
-import com.facebook.common.logging.FLog;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactContext;
@@ -57,7 +51,6 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.common.MapBuilder;
-import com.facebook.react.common.ReactConstants;
 import com.facebook.react.common.build.ReactBuildConfig;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.uimanager.SimpleViewManager;
@@ -66,19 +59,12 @@ import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.uimanager.events.ContentSizeChangeEvent;
 import com.facebook.react.uimanager.events.Event;
 import com.facebook.react.uimanager.events.EventDispatcher;
-import com.facebook.react.uimanager.events.RCTEventEmitter;
 import com.reactnativecommunity.webview.events.TopLoadingErrorEvent;
 import com.reactnativecommunity.webview.events.TopLoadingFinishEvent;
 import com.reactnativecommunity.webview.events.TopLoadingStartEvent;
 import com.reactnativecommunity.webview.events.TopMessageEvent;
 import com.reactnativecommunity.webview.events.TopLoadingProgressEvent;
 import com.reactnativecommunity.webview.events.TopShouldStartLoadWithRequestEvent;
-import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import javax.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -223,7 +209,6 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
       mUrlPrefixesForDefaultIntent = specialUrls;
     }
   }
-
 
   protected static class RNCWebChromeClient extends WebChromeClient {
     protected static final FrameLayout.LayoutParams FULLSCREEN_LAYOUT_PARAMS = new FrameLayout.LayoutParams(
@@ -494,57 +479,7 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
   @TargetApi(Build.VERSION_CODES.LOLLIPOP)
   protected WebView createViewInstance(ThemedReactContext reactContext) {
     RNCWebView webView = createRNCWebViewInstance(reactContext);
-    webView.setWebChromeClient(new WebChromeClient() {
-      @Override
-      public boolean onConsoleMessage(ConsoleMessage message) {
-        if (ReactBuildConfig.DEBUG) {
-          return super.onConsoleMessage(message);
-        }
-        // Ignore console logs in non debug builds.
-        return true;
-      }
-
-
-    @Override
-    public void onProgressChanged(WebView webView, int newProgress) {
-        super.onProgressChanged(webView, newProgress);
-        WritableMap event = Arguments.createMap();
-        event.putDouble("target", webView.getId());
-        event.putString("title", webView.getTitle());
-        event.putBoolean("canGoBack", webView.canGoBack());
-        event.putBoolean("canGoForward", webView.canGoForward());
-        event.putDouble("progress", (float)newProgress/100);
-        dispatchEvent(
-                  webView,
-                  new TopLoadingProgressEvent(
-                      webView.getId(),
-                      event));
-    }
-
-      @Override
-      public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-        callback.invoke(origin, true, false);
-      }
-
-      protected void openFileChooser(ValueCallback<Uri> filePathCallback, String acceptType) {
-        getModule().startPhotoPickerIntent(filePathCallback, acceptType);
-      }
-      protected void openFileChooser(ValueCallback<Uri> filePathCallback) {
-        getModule().startPhotoPickerIntent(filePathCallback, "");
-      }
-      protected void openFileChooser(ValueCallback<Uri> filePathCallback, String acceptType, String capture) {
-        getModule().startPhotoPickerIntent(filePathCallback, acceptType);
-      }
-
-      @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-      @Override
-      public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-        String[] acceptTypes = fileChooserParams.getAcceptTypes();
-        boolean allowMultiple = fileChooserParams.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE;
-        Intent intent = fileChooserParams.createIntent();
-        return getModule().startPhotoPickerIntent(filePathCallback, intent, acceptTypes, allowMultiple);
-      }
-    });
+    webView.setWebChromeClient(new RNCWebChromeClient(reactContext, getModule(), webView));
     reactContext.addLifecycleEventListener(webView);
     mWebViewConfig.configWebView(webView);
     WebSettings settings = webView.getSettings();
@@ -616,16 +551,6 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
     view.getSettings().setJavaScriptEnabled(enabled);
   }
 
-  @ReactProp(name = "showsHorizontalScrollIndicator")
-  public void setShowsHorizontalScrollIndicator(WebView view, boolean enabled) {
-    view.setHorizontalScrollBarEnabled(enabled);
-  }
-
-  @ReactProp(name = "showsVerticalScrollIndicator")
-  public void setShowsVerticalScrollIndicator(WebView view, boolean enabled) {
-    view.setVerticalScrollBarEnabled(enabled);
-  }
-  
   @ReactProp(name = "cacheEnabled")
   public void setCacheEnabled(WebView view, boolean enabled) {
     if (enabled) {
@@ -675,7 +600,6 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
 
   @ReactProp(name = "scalesPageToFit")
   public void setScalesPageToFit(WebView view, boolean enabled) {
-    view.getSettings().setLoadWithOverviewMode(enabled);
     view.getSettings().setUseWideViewPort(!enabled);
   }
 
