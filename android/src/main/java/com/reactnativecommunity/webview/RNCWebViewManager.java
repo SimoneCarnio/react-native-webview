@@ -46,6 +46,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import com.facebook.common.logging.FLog;
 import com.facebook.react.bridge.Arguments;
