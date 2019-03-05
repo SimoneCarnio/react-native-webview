@@ -23,12 +23,16 @@ import java.util.Map;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
@@ -216,6 +220,114 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
 
     public void setUrlPrefixesForDefaultIntent(ReadableArray specialUrls) {
       mUrlPrefixesForDefaultIntent = specialUrls;
+    }
+  }
+
+
+  protected static class RNCWebChromeClient extends WebChromeClient {
+    protected static final FrameLayout.LayoutParams FULLSCREEN_LAYOUT_PARAMS = new FrameLayout.LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER);
+
+    protected ReactContext mReactContext;
+    protected RNCWebViewModule mModule;
+    protected View mWebView;
+
+    protected View mVideoView;
+    protected WebChromeClient.CustomViewCallback mCustomViewCallback;
+
+    public RNCWebChromeClient(ReactContext reactContext, RNCWebViewModule module, WebView webView) {
+      this.mReactContext = reactContext;
+      this.mModule = module;
+      this.mWebView = webView;
+    }
+
+    @Override
+    public void onShowCustomView(View view, CustomViewCallback callback) {
+      if (mVideoView != null) {
+        callback.onCustomViewHidden();
+        return;
+      }
+
+      mVideoView = view;
+      mCustomViewCallback = callback;
+
+      mReactContext.getCurrentActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+      mVideoView.setBackgroundColor(Color.BLACK);
+      getRootView().addView(mVideoView, FULLSCREEN_LAYOUT_PARAMS);
+
+      mWebView.setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onHideCustomView() {
+      if (mVideoView == null) {
+        return;
+      }
+
+      mReactContext.getCurrentActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+      mVideoView.setVisibility(View.GONE);
+      getRootView().removeView(mVideoView);
+      mCustomViewCallback.onCustomViewHidden();
+
+      mVideoView = null;
+      mCustomViewCallback = null;
+
+      mWebView.setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public boolean onConsoleMessage(ConsoleMessage message) {
+      if (ReactBuildConfig.DEBUG) {
+        return super.onConsoleMessage(message);
+      }
+      // Ignore console logs in non debug builds.
+      return true;
+    }
+
+    @Override
+    public void onProgressChanged(WebView webView, int newProgress) {
+      super.onProgressChanged(webView, newProgress);
+      WritableMap event = Arguments.createMap();
+      event.putDouble("target", webView.getId());
+      event.putString("title", webView.getTitle());
+      event.putBoolean("canGoBack", webView.canGoBack());
+      event.putBoolean("canGoForward", webView.canGoForward());
+      event.putDouble("progress", (float)newProgress/100);
+      dispatchEvent(
+              webView,
+              new TopLoadingProgressEvent(
+                      webView.getId(),
+                      event));
+    }
+
+    @Override
+    public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+      callback.invoke(origin, true, false);
+    }
+
+    protected void openFileChooser(ValueCallback<Uri> filePathCallback, String acceptType) {
+      mModule.startPhotoPickerIntent(filePathCallback, acceptType);
+    }
+
+    protected void openFileChooser(ValueCallback<Uri> filePathCallback) {
+      mModule.startPhotoPickerIntent(filePathCallback, "");
+    }
+
+    protected void openFileChooser(ValueCallback<Uri> filePathCallback, String acceptType, String capture) {
+      mModule.startPhotoPickerIntent(filePathCallback, acceptType);
+    }
+
+    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    @Override
+    public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+      String[] acceptTypes = fileChooserParams.getAcceptTypes();
+      boolean allowMultiple = fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+      Intent intent = fileChooserParams.createIntent();
+      return mModule.startPhotoPickerIntent(filePathCallback, intent, acceptTypes, allowMultiple);
+    }
+
+    protected ViewGroup getRootView() {
+      return (ViewGroup) mReactContext.getCurrentActivity().findViewById(android.R.id.content);
     }
   }
 
